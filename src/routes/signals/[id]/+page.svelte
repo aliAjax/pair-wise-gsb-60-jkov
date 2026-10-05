@@ -3,8 +3,11 @@
   import type { SubmitFunction } from '@sveltejs/kit';
   import EvidenceMatrix from '$lib/components/EvidenceMatrix.svelte';
   import RiskBadge from '$lib/components/RiskBadge.svelte';
+  import StaleMarker from '$lib/components/StaleMarker.svelte';
   import type { AuditEntry, CaseVersion, EvidenceItem, SignalStatus } from '$lib/models/signal';
+  import { signalView } from '$lib/services/recalc-views';
   import { exportSignalReport } from '$lib/services/signal-service';
+  import { recalcStateStore } from '$lib/stores/recalc-store';
   import { signalStore } from '$lib/stores/signal-store';
   import type { ActionData, PageData } from './$types';
 
@@ -12,6 +15,7 @@
   export let form: ActionData;
 
   $: signal = $signalStore.find((item) => item.id === data.id);
+  $: view = signal ? signalView($recalcStateStore, signal) : null;
   $: nextVersion = (signal?.versions[0]?.version ?? 0) + 1;
 
   const statusOptions: Array<{ value: SignalStatus; label: string }> = [
@@ -57,7 +61,15 @@
         <span class="text-sm text-surface-500-400">{signal.id}</span>
       </div>
       <h1 class="mt-3 max-w-4xl text-2xl font-semibold">{signal.title}</h1>
-      <div class="mt-3"><RiskBadge risk={signal.riskLevel} status={signal.status} /></div>
+      <div class="mt-3 flex flex-wrap items-center gap-2">
+        <RiskBadge risk={signal.riskLevel} status={signal.status} />
+        {#if view?.stale}
+          <StaleMarker detail={`待更新批号：${view.staleBatches.join('、')}`} size="md" />
+        {/if}
+        {#if !view?.stale && view?.version !== null && view?.version !== undefined}
+          <span class="badge variant-soft-primary">有效版本 V{view.version}</span>
+        {/if}
+      </div>
     </div>
     <button class="btn variant-soft-primary" type="button" on:click={() => exportSignalReport(signal.id)}>
       导出可追溯报告
@@ -82,12 +94,36 @@
           <p class="mt-1 text-sm text-surface-600-300">最后更新 {signal.updatedAt.slice(0, 16).replace('T', ' ')}</p>
         </div>
         <div>
-          <p class="text-xs font-medium text-surface-500-400">报告与暴露</p>
-          <p class="metric-value mt-1 font-medium">{signal.reportCount} 条 / {signal.exposedUnits} 台</p>
+          <p class="text-xs font-medium text-surface-500-400">报告与暴露（批号拆账）</p>
+          <p class="metric-value mt-1 font-medium">
+            {view?.reportCount ?? signal.reportCount} 条 / {view?.exposedUnits ?? signal.exposedUnits} 台
+          </p>
+          <ul class="mt-1 text-xs text-surface-500-400">
+            {#each view?.batchRates ?? [] as part}
+              <li>
+                {part.batch}：{part.reportCount} 条 / {part.installedUnits} 台 ·
+                {part.rate === null ? '不可算' : `${part.rate.toFixed(2)}%`}
+                {#if part.stale}<span class="text-amber-700">（待更新）</span>{/if}
+              </li>
+            {/each}
+          </ul>
         </div>
         <div>
-          <p class="text-xs font-medium text-surface-500-400">核查发生率</p>
-          <p class="metric-value mt-1 font-medium">{signal.occurrenceRate.toFixed(2)}%</p>
+          <p class="text-xs font-medium text-surface-500-400">核查发生率（有效版本）</p>
+          <p class="metric-value mt-1 font-medium">
+            {#if view?.rate === null || view?.rate === undefined}
+              装机量缺失，暂不可算
+            {:else}
+              {view.rate.toFixed(2)}%
+            {/if}
+          </p>
+          <p class="mt-1 text-xs text-surface-500-400">
+            {#if view?.stale}
+              当前为上一版完整数字，重算提交后刷新
+            {:else}
+              与总览、批次页、趋势页同属 V{view?.version ?? 0}
+            {/if}
+          </p>
         </div>
       </div>
       <div class="section-rule mt-5 pt-5">
@@ -272,6 +308,32 @@
   </div>
 
   <div class="mt-6 grid gap-6 xl:grid-cols-2">
+    <section class="rounded border border-surface-300-700 bg-surface-100-900 p-4">
+      <h2 class="font-semibold">调查任务期限</h2>
+      <p class="mt-1 text-xs text-surface-500-400">
+        重算提交后按新发生率收紧的任务只提前不顺延，防止按旧风险继续排期。
+      </p>
+      <ul class="mt-4 space-y-3 text-sm">
+        {#each signal.tasks as task (task.id)}
+          <li class="border-l-2 border-surface-400 pl-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <p class="font-medium">{task.title}</p>
+              <span class="badge {task.status === 'done' ? '' : 'variant-soft-primary'}">
+                {task.status === 'done' ? '已完成' : task.status === 'in_progress' ? '进行中' : '待开始'}
+              </span>
+            </div>
+            <p class="mt-1 text-xs text-surface-500-400">{task.owner} · 截止 {task.dueAt}</p>
+            {#if task.reschedule}
+              <p class="mt-1 text-xs text-teal-700">
+                重算 V{signal.recalcVersion ?? ''} 收紧：{task.reschedule.from} → {task.reschedule.to}
+                （{task.reschedule.reason}）
+              </p>
+            {/if}
+          </li>
+        {/each}
+      </ul>
+    </section>
+
     <section class="rounded border border-surface-300-700 bg-surface-100-900 p-4">
       <h2 class="font-semibold">结论版本</h2>
       <div class="mt-4 space-y-4">

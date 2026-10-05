@@ -1,12 +1,19 @@
 <script lang="ts">
   import RiskBadge from '$lib/components/RiskBadge.svelte';
+  import StaleMarker from '$lib/components/StaleMarker.svelte';
+  import { signalView } from '$lib/services/recalc-views';
+  import { recalcStateStore } from '$lib/stores/recalc-store';
   import { signalStore } from '$lib/stores/signal-store';
 
   $: signals = $signalStore;
+  $: recalcState = $recalcStateStore;
+
+  $: rows = signals.map((signal) => ({ signal, view: signalView(recalcState, signal) }));
   $: openSignals = signals.filter((signal) => signal.status !== 'closed');
   $: criticalSignals = signals.filter(
     (signal) => signal.riskLevel === 'critical' || signal.riskLevel === 'high'
   );
+  $: staleCount = rows.filter((row) => row.view.stale).length;
   $: overdueTasks = signals.flatMap((signal) =>
     signal.tasks
       .filter((task) => task.status !== 'done' && task.dueAt < new Date().toISOString().slice(0, 10))
@@ -19,7 +26,7 @@
     {
       label: '未关闭任务',
       value: signals.flatMap((signal) => signal.tasks).filter((task) => task.status !== 'done').length,
-      note: '跨信号调查任务'
+      note: '跨信号调查任务（期限按最新发生率重排）'
     },
     { label: '逾期任务', value: overdueTasks.length, note: '按任务截止日计算' }
   ];
@@ -30,11 +37,20 @@
 <div class="mb-6 flex flex-wrap items-end justify-between gap-3">
   <div>
     <p class="text-sm font-medium text-teal-700">上市后安全运营</p>
-    <h1 class="mt-1 text-2xl font-semibold tracking-normal">信号核查总览</h1>
+    <h1 class="mt-1 text-2xl font-semibold">信号核查总览</h1>
     <p class="mt-2 text-sm text-surface-600-300">汇总投诉、维修、不良事件和现场报告，按风险推进核查闭环。</p>
   </div>
-  <a class="btn variant-filled-primary" href="/signals">进入信号台账</a>
+  <div class="flex items-center gap-3">
+    <span class="badge variant-soft-primary">有效重算版本 V{recalcState.effectiveVersion}</span>
+    <a class="btn variant-filled-primary" href="/signals">进入信号台账</a>
+  </div>
 </div>
+
+{#if staleCount > 0}
+  <div class="mb-4 rounded border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+    ⟳ {staleCount} 条信号涉及批号旧发生率已失效，页面先显示上一版完整数字与待更新标记，重算提交后统一刷新。
+  </div>
+{/if}
 
 <section class="workspace-grid mb-6">
   {#each metrics as metric}
@@ -51,22 +67,32 @@
     <div class="flex items-center justify-between border-b border-surface-300-700 px-4 py-3">
       <div>
         <h2 class="font-semibold">近期信号</h2>
-        <p class="text-xs text-surface-500-400">按最后更新时间排序</p>
+        <p class="text-xs text-surface-500-400">按最后更新时间排序 · 发生率取自同一份有效重算版本</p>
       </div>
       <a class="text-sm text-primary-700-300 hover:underline" href="/signals">查看全部</a>
     </div>
     <div class="divide-y divide-surface-300-700">
-      {#each signals.slice(0, 4) as signal}
-        <a class="block px-4 py-4 hover:bg-surface-200-800" href={`/signals/${signal.id}`}>
+      {#each rows.slice(0, 4) as row (row.signal.id)}
+        <a class="block px-4 py-4 hover:bg-surface-200-800" href={`/signals/${row.signal.id}`}>
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p class="text-xs text-surface-500-400">{signal.id} · {signal.product}</p>
-              <h3 class="mt-1 font-medium">{signal.title}</h3>
+              <p class="text-xs text-surface-500-400">{row.signal.id} · {row.signal.product}</p>
+              <h3 class="mt-1 font-medium">{row.signal.title}</h3>
             </div>
-            <RiskBadge risk={signal.riskLevel} status={signal.status} />
+            <div class="flex items-center gap-2">
+              {#if row.view.stale}
+                <StaleMarker detail={`待更新批号：${row.view.staleBatches.join('、')}`} />
+              {/if}
+              <RiskBadge risk={row.signal.riskLevel} status={row.signal.status} />
+            </div>
           </div>
           <p class="mt-2 text-sm text-surface-600-300">
-            {signal.reportCount} 条报告 · 发生率 {signal.occurrenceRate.toFixed(2)}% · 负责人 {signal.owner}
+            {row.view.reportCount} 条报告 ·
+            发生率 {row.view.rate === null ? '装机量缺失，不可算' : `${row.view.rate.toFixed(2)}%`}
+            · 负责人 {row.signal.owner}
+            {#if !row.view.stale && row.view.version !== null}
+              · <span class="text-xs text-surface-500-400">V{row.view.version}</span>
+            {/if}
           </p>
         </a>
       {/each}
@@ -83,6 +109,11 @@
         <div class="border-l-2 border-amber-500 pl-3">
           <p class="text-sm font-medium">{task.title}</p>
           <p class="mt-1 text-xs text-surface-500-400">{task.signalId} · {task.owner} · 截止 {task.dueAt}</p>
+          {#if task.reschedule}
+            <p class="mt-1 text-xs text-teal-700">
+              已由重算收紧：{task.reschedule.from} → {task.reschedule.to}
+            </p>
+          {/if}
         </div>
       {/each}
     </div>

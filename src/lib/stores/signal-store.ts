@@ -8,13 +8,25 @@ import type {
   SignalStatus,
   RiskLevel
 } from '$lib/models/signal';
+import type { SignalRecalcPlan } from '$lib/services/recalc-engine';
 import { seedSignals } from '$lib/services/seed';
 import { get, writable } from 'svelte/store';
 
 const STORAGE_KEY = 'medical-safety-signals-v1';
 
 function cloneSeed(): SignalCase[] {
-  return structuredClone(seedSignals);
+  return normalizeSignals(structuredClone(seedSignals));
+}
+
+/** 旧版本本地数据没有重算版本字段，补齐为 null（尚未纳入物化）。 */
+function normalizeSignals(signals: SignalCase[]): SignalCase[] {
+  for (const signal of signals) {
+    if (signal.recalcVersion === undefined) signal.recalcVersion = null;
+    for (const task of signal.tasks) {
+      if (task.reschedule === undefined) delete (task as Partial<InvestigationTask>).reschedule;
+    }
+  }
+  return signals;
 }
 
 function readPersisted(): SignalCase[] {
@@ -22,7 +34,7 @@ function readPersisted(): SignalCase[] {
 
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as SignalCase[]) : cloneSeed();
+    return raw ? normalizeSignals(JSON.parse(raw) as SignalCase[]) : cloneSeed();
   } catch {
     return cloneSeed();
   }
@@ -190,6 +202,60 @@ export const signalStore = {
     );
   },
 
+  /**
+   * 重算引擎 finalize 后把已提交版本应用到信号表（聚合数字 + 任务期限 + 审计）。
+   * 幂等且单调：只接受比信号当前 recalcVersion 更新的版本，断点重放不会重复收紧期限。
+   */
+  applyRecalc(plan: SignalRecalcPlan) {
+    internal.update((items) =>
+      items.map((signal) => {
+        const update = plan.signals.find((item) => item.signalId === signal.id);
+        if (!update) return signal;
+        if (signal.recalcVersion !== null && signal.recalcVersion >= plan.version) return signal;
+
+        const updated = structuredClone(signal);
+        const previousRate = updated.occurrenceRate || 0;
+        updated.reportCount = update.reportCount;
+        updated.exposedUnits = update.exposedUnits;
+        updated.occurrenceRate = update.rate ?? 0;
+        updated.recalcVersion = plan.version;
+
+        for (const reschedule of update.reschedules) {
+          updated.tasks = updated.tasks.map((task) =>
+            task.id === reschedule.taskId && !task.reschedule
+              ? {
+                  ...task,
+                  dueAt: reschedule.to,
+                  reschedule: {
+                    from: reschedule.from,
+                    to: reschedule.to,
+                    reason: reschedule.reason,
+                    at: new Date().toISOString(),
+                    byJobId: plan.jobId
+                  }
+                }
+              : task
+          );
+        }
+
+        appendAudit(
+          updated,
+          '重算引擎',
+          '发生率重算',
+          `V${plan.version}（任务 ${plan.jobId}）：报告 ${update.reportCount} 条 / 装机 ${update.exposedUnits} 台，发生率 ${previousRate.toFixed(2)}% -> ${(update.rate ?? 0).toFixed(2)}%` +
+            (update.reschedules.length ? `；${update.reschedules.length} 项调查任务按新风险收紧期限` : '') +
+            '。'
+        );
+        return updated;
+      })
+    );
+  },
+
+  /** 由重算模块在整库重置时联动调用。 */
+  setSignals(signals: SignalCase[]) {
+    internal.set(normalizeSignals(structuredClone(signals)));
+  },
+
   reset() {
     internal.set(cloneSeed());
   },
@@ -247,6 +313,7 @@ export function createSignalFromForm(input: {
         createdAt: nowIso
       }
     ],
-    reopenedCount: 0
+    reopenedCount: 0,
+    recalcVersion: null
   };
 }

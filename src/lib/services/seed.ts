@@ -94,7 +94,8 @@ export const seedSignals: SignalCase[] = [
         createdAt: '2026-09-10T03:00:00.000Z'
       }
     ],
-    reopenedCount: 0
+    reopenedCount: 0,
+    recalcVersion: 0
   },
   {
     id: 'SIG-2026-015',
@@ -165,7 +166,8 @@ export const seedSignals: SignalCase[] = [
         createdAt: '2026-08-23T05:00:00.000Z'
       }
     ],
-    reopenedCount: 0
+    reopenedCount: 0,
+    recalcVersion: 0
   },
   {
     id: 'SIG-2026-011',
@@ -226,7 +228,8 @@ export const seedSignals: SignalCase[] = [
         createdAt: '2026-08-18T09:30:00.000Z'
       }
     ],
-    reopenedCount: 0
+    reopenedCount: 0,
+    recalcVersion: 0
   },
   {
     id: 'SIG-2026-019',
@@ -304,6 +307,7 @@ export const seedSignals: SignalCase[] = [
         createdAt: '2026-09-28T11:40:00.000Z'
       }
     ],
-    reopenedCount: 0
+    reopenedCount: 0,
+    recalcVersion: 0
   }
 ];

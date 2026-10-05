@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from '$app/stores';
+  import RecalcBanner from './RecalcBanner.svelte';
 
   const navItems = [
     { href: '/', label: '总览', short: '览' },
@@ -41,6 +42,9 @@
   </header>
 
   <main class="mx-auto max-w-[1600px] px-4 py-5 lg:px-6 lg:py-7">
-    <slot />
+    <RecalcBanner />
+    <div class="mt-4">
+      <slot />
+    </div>
   </main>
 </div>

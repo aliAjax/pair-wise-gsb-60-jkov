@@ -1,12 +1,15 @@
 <script lang="ts">
   import type { SignalCase } from '$lib/models/signal';
+  import { signalView } from '$lib/services/recalc-views';
+  import { recalcStateStore } from '$lib/stores/recalc-store';
   import RiskBadge from './RiskBadge.svelte';
+  import StaleMarker from './StaleMarker.svelte';
 
   export let signals: SignalCase[];
 
   const sourceLabels: Record<SignalCase['sourceType'], string> = {
     complaint: '投诉',
-    repair: '维修',
+    repair: '维修记录',
     adverse_event: '不良事件',
     field_report: '现场报告'
   };
@@ -19,7 +22,7 @@
         <th>信号</th>
         <th>产品 / 批号</th>
         <th>风险与状态</th>
-        <th>发生率</th>
+        <th>发生率（有效版本 V{$recalcStateStore.effectiveVersion}）</th>
         <th>负责人</th>
         <th>更新时间</th>
         <th>操作</th>
@@ -27,6 +30,7 @@
     </thead>
     <tbody>
       {#each signals as signal (signal.id)}
+        {@const view = signalView($recalcStateStore, signal)}
         <tr>
           <td>
             <a class="font-semibold text-primary-700-300 hover:underline" href={`/signals/${signal.id}`}>
@@ -41,8 +45,13 @@
           </td>
           <td><RiskBadge risk={signal.riskLevel} status={signal.status} /></td>
           <td>
-            <p class="metric-value font-semibold">{signal.occurrenceRate.toFixed(2)}%</p>
-            <p class="text-xs text-surface-500-400">{signal.reportCount} 条报告</p>
+            <div class="flex items-center gap-2">
+              <p class="metric-value font-semibold">
+                {view.rate === null ? '不可算' : `${view.rate.toFixed(2)}%`}
+              </p>
+              {#if view.stale}<StaleMarker detail={`待更新批号：${view.staleBatches.join('、')}`} />{/if}
+            </div>
+            <p class="text-xs text-surface-500-400">{view.reportCount} 条报告 / {view.exposedUnits} 台装机</p>
           </td>
           <td>{signal.owner}</td>
           <td>{signal.updatedAt.slice(0, 10)}</td>

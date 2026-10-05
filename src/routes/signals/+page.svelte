@@ -4,6 +4,7 @@
   import SignalTable from '$lib/components/SignalTable.svelte';
   import type { SignalCase, SignalFilters } from '$lib/models/signal';
   import { listSignals } from '$lib/services/signal-service';
+  import { recalc, recalcStateStore } from '$lib/stores/recalc-store';
   import { signalStore } from '$lib/stores/signal-store';
   import type { ActionData } from './$types';
 
@@ -22,6 +23,13 @@
     queryKey: ['signals', filters],
     queryFn: () => listSignals(filters)
   });
+
+  // 任一有效重算版本提交后刷新台账，保证列表与唯一有效版本一致。
+  let lastVersion = $recalcStateStore.effectiveVersion;
+  $: if ($recalcStateStore.effectiveVersion !== lastVersion) {
+    lastVersion = $recalcStateStore.effectiveVersion;
+    queryClient.invalidateQueries({ queryKey: ['signals'] });
+  }
 
   $: signals = ($query.data ?? []) as SignalCase[];
   $: statusCounts = signals.reduce<Record<string, number>>((counts, signal) => {
@@ -55,7 +63,11 @@
         return async ({ result, update }) => {
           if (result.type === 'success') {
             const data = result.data as { signal?: SignalCase };
-            if (data.signal) signalStore.add(data.signal);
+            if (data.signal) {
+              signalStore.add(data.signal);
+              // 新信号的初始报告数纳入基线，并触发受影响批号重算。
+              recalc.registerSignal(data.signal);
+            }
             await queryClient.invalidateQueries({ queryKey: ['signals'] });
             showCreate = false;
           }
