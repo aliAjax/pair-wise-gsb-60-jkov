@@ -5,13 +5,17 @@ import type {
   EvidenceItem,
   InvestigationTask,
   SignalCase,
+  SignalSourceType,
   SignalStatus,
   RiskLevel
 } from '$lib/models/signal';
+import type { PendingCommit } from '$lib/models/recalc';
 import { seedSignals } from '$lib/services/seed';
 import { get, writable } from 'svelte/store';
 
 const STORAGE_KEY = 'medical-safety-signals-v1';
+/** 已成功应用的两阶段提交（jobId::version），保证崩溃恢复重放幂等。 */
+const APPLIED_COMMITS_KEY = 'medical-safety-applied-commits-v1';
 
 function cloneSeed(): SignalCase[] {
   return structuredClone(seedSignals);
@@ -72,6 +76,28 @@ function appendAudit(signal: SignalCase, actor: string, action: string, detail: 
     createdAt: now()
   });
   signal.updatedAt = now();
+}
+
+function readAppliedCommits(): string[] {
+  if (!browser) return [];
+  try {
+    const raw = localStorage.getItem(APPLIED_COMMITS_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function hasAppliedCommit(marker: string): boolean {
+  return readAppliedCommits().includes(marker);
+}
+
+function markAppliedCommit(marker: string) {
+  if (!browser) return;
+  const markers = readAppliedCommits().filter((item) => item !== marker);
+  // 只保留最近 100 条，避免无限增长。
+  markers.unshift(marker);
+  localStorage.setItem(APPLIED_COMMITS_KEY, JSON.stringify(markers.slice(0, 100)));
 }
 
 export const signalStore = {
@@ -190,8 +216,47 @@ export const signalStore = {
     );
   },
 
+  /**
+   * 应用一次重算的两阶段提交（阶段 2）。按 commit 计划幂等更新信号：
+   * 数字/风险/任务来自同一份计划，审计逐条追加；重放同一 jobId::version
+   * 直接跳过，因此恢复时绝不会出现重复审计或重复期限重排。
+   * 返回实际应用（而非跳过）的信号数。
+   */
+  applyPendingCommit(plan: PendingCommit): number {
+    const marker = `${plan.jobId}::${plan.version}`;
+    if (hasAppliedCommit(marker)) return 0;
+
+    let applied = 0;
+    internal.update((items) =>
+      items.map((signal) => {
+        const patch = plan.signalPatches[signal.id];
+        if (!patch) return signal;
+        const updated = structuredClone(signal);
+        updated.reportCount = patch.reportCount;
+        updated.exposedUnits = patch.exposedUnits;
+        updated.occurrenceRate = patch.occurrenceRate;
+        updated.rateKnown = patch.rateKnown;
+        updated.riskLevel = patch.riskLevel;
+        if (patch.tasks) updated.tasks = patch.tasks;
+        updated.recalcVersion = plan.version;
+        updated.updatedAt = plan.committedAt;
+        for (const entry of patch.audits) {
+          if (!updated.audit.some((existing) => existing.id === entry.id)) {
+            updated.audit.unshift(structuredClone(entry));
+          }
+        }
+        applied += 1;
+        return updated;
+      })
+    );
+
+    markAppliedCommit(marker);
+    return applied;
+  },
+
   reset() {
     internal.set(cloneSeed());
+    if (browser) localStorage.removeItem(APPLIED_COMMITS_KEY);
   },
 
   getSnapshot() {
@@ -218,9 +283,11 @@ export function createSignalFromForm(input: {
     status: 'new',
     riskLevel: riskFromSeverity(input.severity),
     severity: input.severity,
-    reportCount: 1,
+    reportCount: 0,
     exposedUnits: 0,
     occurrenceRate: 0,
+    rateKnown: false,
+    recalcVersion: 0,
     occurredAt: input.occurredAt,
     openedAt: nowIso,
     updatedAt: nowIso,

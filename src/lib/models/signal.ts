@@ -70,6 +70,22 @@ export interface InvestigationTask {
   owner: string;
   dueAt: string;
   status: 'open' | 'in_progress' | 'done';
+  /** 最近一次期限重排来自哪个重算版本。 */
+  scheduledByVersion?: number;
+}
+
+/**
+ * 重算提交时对单个信号的原子补丁。applySignalRecalcPatch 必须幂等：
+ * 同一 commitId 重放（崩溃恢复）不得重复追加审计或重复重排任务。
+ */
+export interface SignalRecalcPatch {
+  reportCount: number;
+  exposedUnits: number;
+  occurrenceRate: number;
+  rateKnown: boolean;
+  riskLevel: RiskLevel;
+  audits: AuditEntry[];
+  tasks?: InvestigationTask[];
 }
 
 export interface CaseVersion {
@@ -88,6 +104,10 @@ export interface AuditEntry {
   action: string;
   detail: string;
   createdAt: string;
+  /** 该记录由哪一次有效重算版本产生（RV 版本号）。 */
+  recalcVersion?: number;
+  /** 触发该记录的重算作业。 */
+  jobId?: string;
 }
 
 export interface SignalCase {
@@ -102,6 +122,8 @@ export interface SignalCase {
   reportCount: number;
   exposedUnits: number;
   occurrenceRate: number;
+  /** 该信号的发生率字段是否来自一次有效重算（装机量缺失时为 false）。 */
+  rateKnown: boolean;
   occurredAt: string;
   openedAt: string;
   updatedAt: string;
@@ -113,6 +135,8 @@ export interface SignalCase {
   versions: CaseVersion[];
   audit: AuditEntry[];
   reopenedCount: number;
+  /** 当前发生率/报告数/装机量来自哪个重算版本；0 表示尚未经过任何有效重算。 */
+  recalcVersion: number;
 }
 
 export interface SignalFilters {

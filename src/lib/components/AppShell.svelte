@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from '$app/stores';
+  import { recalcStore } from '$lib/stores/recalc-store';
 
   const navItems = [
     { href: '/', label: '总览', short: '览' },
@@ -35,6 +36,17 @@
           <p class="text-xs text-surface-500-400">当前角色</p>
           <p class="text-sm font-medium">安全评审专员</p>
         </div>
+        <a
+          href="/batches"
+          class="badge px-3 py-1.5 {$recalcStore.staleBatches.length > 0
+            ? 'animate-pulse bg-amber-100 text-amber-950'
+            : 'bg-emerald-100 text-emerald-900'}"
+          title={$recalcStore.staleBatches.length > 0
+            ? `待更新批号：${$recalcStore.staleBatches.join('、')}`
+            : '各页面引用同一有效重算版本'}
+        >
+          RV{$recalcStore.currentVersion}{$recalcStore.staleBatches.length > 0 ? ' · 待更新' : ''}
+        </a>
         <span class="badge variant-soft-primary">在线</span>
       </div>
     </div>

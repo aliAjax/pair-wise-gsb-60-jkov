@@ -1,8 +1,12 @@
 <script lang="ts">
   import type { SignalCase } from '$lib/models/signal';
+  import type { RecalcState } from '$lib/models/recalc';
+  import { signalRateText } from '$lib/services/recalc-views';
+  import RecalcBadge from './RecalcBadge.svelte';
   import RiskBadge from './RiskBadge.svelte';
 
   export let signals: SignalCase[];
+  export let recalcState: RecalcState;
 
   const sourceLabels: Record<SignalCase['sourceType'], string> = {
     complaint: '投诉',
@@ -13,13 +17,13 @@
 </script>
 
 <div class="overflow-x-auto">
-  <table class="data-table min-w-[960px]">
+  <table class="data-table min-w-[1020px]">
     <thead>
       <tr>
         <th>信号</th>
         <th>产品 / 批号</th>
         <th>风险与状态</th>
-        <th>发生率</th>
+        <th>发生率 / 版本</th>
         <th>负责人</th>
         <th>更新时间</th>
         <th>操作</th>
@@ -41,8 +45,9 @@
           </td>
           <td><RiskBadge risk={signal.riskLevel} status={signal.status} /></td>
           <td>
-            <p class="metric-value font-semibold">{signal.occurrenceRate.toFixed(2)}%</p>
-            <p class="text-xs text-surface-500-400">{signal.reportCount} 条报告</p>
+            <p class="metric-value font-semibold">{signalRateText(signal)}</p>
+            <p class="mt-1 text-xs text-surface-500-400">{signal.reportCount} 条报告</p>
+            <div class="mt-1"><RecalcBadge state={recalcState} {signal} /></div>
           </td>
           <td>{signal.owner}</td>
           <td>{signal.updatedAt.slice(0, 10)}</td>
@@ -58,3 +63,4 @@
     </tbody>
   </table>
 </div>
+

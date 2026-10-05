@@ -2,15 +2,19 @@
   import { enhance } from '$app/forms';
   import type { SubmitFunction } from '@sveltejs/kit';
   import EvidenceMatrix from '$lib/components/EvidenceMatrix.svelte';
+  import RecalcBadge from '$lib/components/RecalcBadge.svelte';
   import RiskBadge from '$lib/components/RiskBadge.svelte';
   import type { AuditEntry, CaseVersion, EvidenceItem, SignalStatus } from '$lib/models/signal';
+  import { signalRateText } from '$lib/services/recalc-views';
   import { exportSignalReport } from '$lib/services/signal-service';
+  import { recalcStore } from '$lib/stores/recalc-store';
   import { signalStore } from '$lib/stores/signal-store';
   import type { ActionData, PageData } from './$types';
 
   export let data: PageData;
   export let form: ActionData;
 
+  $: state = $recalcStore;
   $: signal = $signalStore.find((item) => item.id === data.id);
   $: nextVersion = (signal?.versions[0]?.version ?? 0) + 1;
 
@@ -82,12 +86,16 @@
           <p class="mt-1 text-sm text-surface-600-300">最后更新 {signal.updatedAt.slice(0, 16).replace('T', ' ')}</p>
         </div>
         <div>
-          <p class="text-xs font-medium text-surface-500-400">报告与暴露</p>
+          <p class="text-xs font-medium text-surface-500-400">报告与暴露（批号拆分后聚合）</p>
           <p class="metric-value mt-1 font-medium">{signal.reportCount} 条 / {signal.exposedUnits} 台</p>
         </div>
         <div>
           <p class="text-xs font-medium text-surface-500-400">核查发生率</p>
-          <p class="metric-value mt-1 font-medium">{signal.occurrenceRate.toFixed(2)}%</p>
+          <p class="metric-value mt-1 font-medium">{signalRateText(signal)}</p>
+          <div class="mt-2 flex flex-wrap items-center gap-2">
+            <RecalcBadge {state} {signal} />
+            <a class="text-xs text-primary-700-300 hover:underline" href="/batches">补录/撤回报告或修正装机量</a>
+          </div>
         </div>
       </div>
       <div class="section-rule mt-5 pt-5">

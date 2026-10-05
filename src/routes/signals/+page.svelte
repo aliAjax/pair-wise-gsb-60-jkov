@@ -4,6 +4,7 @@
   import SignalTable from '$lib/components/SignalTable.svelte';
   import type { SignalCase, SignalFilters } from '$lib/models/signal';
   import { listSignals } from '$lib/services/signal-service';
+  import { recalcStore } from '$lib/stores/recalc-store';
   import { signalStore } from '$lib/stores/signal-store';
   import type { ActionData } from './$types';
 
@@ -23,6 +24,7 @@
     queryFn: () => listSignals(filters)
   });
 
+  $: recalcState = $recalcStore;
   $: signals = ($query.data ?? []) as SignalCase[];
   $: statusCounts = signals.reduce<Record<string, number>>((counts, signal) => {
     counts[signal.status] = (counts[signal.status] ?? 0) + 1;
@@ -165,6 +167,6 @@
   {:else if $query.isError}
     <div class="p-8 text-center text-error-700">信号台账读取失败。</div>
   {:else}
-    <SignalTable {signals} />
+    <SignalTable {signals} {recalcState} />
   {/if}
 </section>

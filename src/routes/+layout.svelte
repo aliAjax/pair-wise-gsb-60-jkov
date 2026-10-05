@@ -1,6 +1,9 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
   import AppShell from '$lib/components/AppShell.svelte';
+  import { recalcStore } from '$lib/stores/recalc-store';
+  import { recoverOnBoot } from '$lib/stores/recalc-store';
   import '../app.css';
 
   const queryClient = new QueryClient({
@@ -11,6 +14,19 @@
       }
     }
   });
+
+  // 重算版本/待更新批号变化（含崩溃恢复）后，令依赖信号的查询重新读取。
+  let lastVersion = 0;
+  let lastStaleKey = '';
+  $: recalcVersion = $recalcStore.currentVersion;
+  $: staleKey = $recalcStore.staleBatches.join(',');
+  $: if (recalcVersion !== lastVersion || staleKey !== lastStaleKey) {
+    lastVersion = recalcVersion;
+    lastStaleKey = staleKey;
+    if (lastVersion > 0) queryClient.invalidateQueries({ queryKey: ['signals'] });
+  }
+
+  onMount(() => recoverOnBoot());
 </script>
 
 <svelte:head>

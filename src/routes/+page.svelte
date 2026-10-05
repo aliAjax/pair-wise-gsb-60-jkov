@@ -1,7 +1,11 @@
 <script lang="ts">
+  import RecalcBadge from '$lib/components/RecalcBadge.svelte';
   import RiskBadge from '$lib/components/RiskBadge.svelte';
+  import { signalRecalcView, signalRateText } from '$lib/services/recalc-views';
+  import { recalcStore } from '$lib/stores/recalc-store';
   import { signalStore } from '$lib/stores/signal-store';
 
+  $: state = $recalcStore;
   $: signals = $signalStore;
   $: openSignals = signals.filter((signal) => signal.status !== 'closed');
   $: criticalSignals = signals.filter(
@@ -12,16 +16,17 @@
       .filter((task) => task.status !== 'done' && task.dueAt < new Date().toISOString().slice(0, 10))
       .map((task) => ({ ...task, signalId: signal.id }))
   );
+  $: staleSignals = signals.filter((signal) => signalRecalcView(state, signal).stale);
 
   $: metrics = [
     { label: '开放信号', value: openSignals.length, note: '含调查、观察与处置队列' },
-    { label: '高及以上风险', value: criticalSignals.length, note: '需复核人优先确认' },
+    { label: '高及以上风险', value: criticalSignals.length, note: '重算发生率联动后的风险' },
     {
       label: '未关闭任务',
       value: signals.flatMap((signal) => signal.tasks).filter((task) => task.status !== 'done').length,
       note: '跨信号调查任务'
     },
-    { label: '逾期任务', value: overdueTasks.length, note: '按任务截止日计算' }
+    { label: '逾期任务', value: overdueTasks.length, note: '按重算后的任务截止日计算' }
   ];
 </script>
 
@@ -34,6 +39,18 @@
     <p class="mt-2 text-sm text-surface-600-300">汇总投诉、维修、不良事件和现场报告，按风险推进核查闭环。</p>
   </div>
   <a class="btn variant-filled-primary" href="/signals">进入信号台账</a>
+</div>
+
+<div class="mb-5 flex flex-wrap items-center gap-3 rounded border border-surface-300-700 bg-surface-100-900 px-4 py-3 text-sm">
+  <span class="badge bg-teal-700 text-white">有效重算版本 RV{state.currentVersion}</span>
+  {#if state.staleBatches.length > 0}
+    <span class="badge animate-pulse bg-amber-100 text-amber-950">
+      {staleSignals.length} 个信号 / {state.staleBatches.length} 个批号待更新，下方显示旧值
+    </span>
+    <a class="text-xs text-primary-700-300 hover:underline" href="/batches">查看重算进度 →</a>
+  {:else}
+    <span class="text-xs text-surface-500-400">总览、批次、趋势引用同一份有效结果。</span>
+  {/if}
 </div>
 
 <section class="workspace-grid mb-6">
@@ -51,7 +68,7 @@
     <div class="flex items-center justify-between border-b border-surface-300-700 px-4 py-3">
       <div>
         <h2 class="font-semibold">近期信号</h2>
-        <p class="text-xs text-surface-500-400">按最后更新时间排序</p>
+        <p class="text-xs text-surface-500-400">按最后更新时间排序；发生率为 canonical 批号结果聚合</p>
       </div>
       <a class="text-sm text-primary-700-300 hover:underline" href="/signals">查看全部</a>
     </div>
@@ -63,10 +80,13 @@
               <p class="text-xs text-surface-500-400">{signal.id} · {signal.product}</p>
               <h3 class="mt-1 font-medium">{signal.title}</h3>
             </div>
-            <RiskBadge risk={signal.riskLevel} status={signal.status} />
+            <div class="flex flex-col items-end gap-2">
+              <RiskBadge risk={signal.riskLevel} status={signal.status} />
+              <RecalcBadge {state} {signal} />
+            </div>
           </div>
           <p class="mt-2 text-sm text-surface-600-300">
-            {signal.reportCount} 条报告 · 发生率 {signal.occurrenceRate.toFixed(2)}% · 负责人 {signal.owner}
+            {signal.reportCount} 条报告 · 发生率 {signalRateText(signal)} · 负责人 {signal.owner}
           </p>
         </a>
       {/each}
@@ -76,13 +96,16 @@
   <aside class="rounded border border-surface-300-700 bg-surface-100-900">
     <div class="border-b border-surface-300-700 px-4 py-3">
       <h2 class="font-semibold">任务与复核提醒</h2>
-      <p class="text-xs text-surface-500-400">优先处理逾期及高风险事项</p>
+      <p class="text-xs text-surface-500-400">期限随重算风险联动收紧，逾期事项优先</p>
     </div>
     <div class="space-y-4 p-4">
       {#each signals.flatMap((signal) => signal.tasks.map((task) => ({ ...task, signalId: signal.id }))).filter((task) => task.status !== 'done').slice(0, 5) as task}
         <div class="border-l-2 border-amber-500 pl-3">
           <p class="text-sm font-medium">{task.title}</p>
-          <p class="mt-1 text-xs text-surface-500-400">{task.signalId} · {task.owner} · 截止 {task.dueAt}</p>
+          <p class="mt-1 text-xs text-surface-500-400">
+            {task.signalId} · {task.owner} · 截止 {task.dueAt}
+            {#if task.scheduledByVersion}（RV{task.scheduledByVersion} 重排）{/if}
+          </p>
         </div>
       {/each}
     </div>

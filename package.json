@@ -2,6 +2,9 @@
   "name": "medical-device-safety-signal-workbench",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 18460",

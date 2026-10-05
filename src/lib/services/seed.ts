@@ -13,6 +13,7 @@ export const seedSignals: SignalCase[] = [
     reportCount: 17,
     exposedUnits: 2048,
     occurrenceRate: 0.83,
+    rateKnown: true,
     occurredAt: '2026-09-08',
     openedAt: '2026-09-09T02:10:00.000Z',
     updatedAt: '2026-09-28T08:30:00.000Z',
@@ -94,7 +95,8 @@ export const seedSignals: SignalCase[] = [
         createdAt: '2026-09-10T03:00:00.000Z'
       }
     ],
-    reopenedCount: 0
+    reopenedCount: 0,
+    recalcVersion: 1
   },
   {
     id: 'SIG-2026-015',
@@ -108,6 +110,7 @@ export const seedSignals: SignalCase[] = [
     reportCount: 9,
     exposedUnits: 876,
     occurrenceRate: 1.03,
+    rateKnown: true,
     occurredAt: '2026-08-22',
     openedAt: '2026-08-23T05:00:00.000Z',
     updatedAt: '2026-09-25T04:30:00.000Z',
@@ -165,7 +168,8 @@ export const seedSignals: SignalCase[] = [
         createdAt: '2026-08-23T05:00:00.000Z'
       }
     ],
-    reopenedCount: 0
+    reopenedCount: 0,
+    recalcVersion: 1
   },
   {
     id: 'SIG-2026-011',
@@ -179,6 +183,7 @@ export const seedSignals: SignalCase[] = [
     reportCount: 4,
     exposedUnits: 310,
     occurrenceRate: 1.29,
+    rateKnown: true,
     occurredAt: '2026-06-11',
     openedAt: '2026-06-12T01:40:00.000Z',
     updatedAt: '2026-08-18T09:30:00.000Z',
@@ -226,7 +231,8 @@ export const seedSignals: SignalCase[] = [
         createdAt: '2026-08-18T09:30:00.000Z'
       }
     ],
-    reopenedCount: 0
+    reopenedCount: 0,
+    recalcVersion: 1
   },
   {
     id: 'SIG-2026-019',
@@ -240,6 +246,7 @@ export const seedSignals: SignalCase[] = [
     reportCount: 3,
     exposedUnits: 120,
     occurrenceRate: 2.5,
+    rateKnown: true,
     occurredAt: '2026-09-21',
     openedAt: '2026-09-22T00:20:00.000Z',
     updatedAt: '2026-09-28T11:40:00.000Z',
@@ -304,6 +311,7 @@ export const seedSignals: SignalCase[] = [
         createdAt: '2026-09-28T11:40:00.000Z'
       }
     ],
-    reopenedCount: 0
+    reopenedCount: 0,
+    recalcVersion: 1
   }
 ];
